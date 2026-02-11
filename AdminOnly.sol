@@ -1,72 +1,90 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.19;
+
 
 contract AdminOnly {
-    // State variables
     address public owner;
     uint256 public treasureAmount;
-    mapping(address => uint256) public withdrawalAllowance;
-    mapping(address => bool) public hasWithdrawn;
-    
-    // Constructor sets the contract creator as the owner
+    mapping(address => uint256) public  withdrawalAllowance;
+    mapping(address => bool) public  hasWithdrawn;
+    mapping(address => uint256) public  maximumWithdrawal; 
+
+    event TreasureAdded(address indexed admin, uint256 amount);
+    event TreasureWithdrawn(address indexed recipient, uint256 amount);
+    event OwnershipTransferred(address indexed oldOwner, address indexed newOwner);
+    event WithdrawalApproved(address indexed recipient, uint256 amount);
+    event MaximumWithdrawalSet(address indexed recipient, uint256 amount);
+
     constructor() {
         owner = msg.sender;
+        emit OwnershipTransferred(address(0), msg.sender);
     }
-    
-    // Modifier for owner-only functions
-    modifier onlyOwner() {
-        require(msg.sender == owner, "Access denied: Only the owner can perform this action");
-        _;
-    }
-    
-    // Only the owner can add treasure
-    function addTreasure(uint256 amount) public onlyOwner {
-        treasureAmount += amount;
-    }
-    
-    // Only the owner can approve withdrawals
-    function approveWithdrawal(address recipient, uint256 amount) public onlyOwner {
-        require(amount <= treasureAmount, "Not enough treasure available");
-        withdrawalAllowance[recipient] = amount;
-    }
-    
-    
-    // Anyone can attempt to withdraw, but only those with allowance will succeed
-    function withdrawTreasure(uint256 amount) public {
 
-        if(msg.sender == owner){
-            require(amount <= treasureAmount, "Not enough treasury available for this action.");
-            treasureAmount-= amount;
 
-            return;
-        }
-        uint256 allowance = withdrawalAllowance[msg.sender];
-        
-        // Check if user has an allowance and hasn't withdrawn yet
-        require(allowance > 0, "You don't have any treasure allowance");
-        require(!hasWithdrawn[msg.sender], "You have already withdrawn your treasure");
-        require(allowance <= treasureAmount, "Not enough treasure in the chest");
-        require(allowance >= amount, "Cannot withdraw more than you are allowed"); // condition to check if user is withdrawing more than allowed
-        
-        // Mark as withdrawn and reduce treasure
-        hasWithdrawn[msg.sender] = true;
-        treasureAmount -= allowance;
-        withdrawalAllowance[msg.sender] = 0;
-        
+     modifier onlyOwner() {
+       require(msg.sender == owner, "Access denied: Only the owner can perform this action");
+       _;
+     }
+
+    function addTreasure() public payable  onlyOwner {
+        treasureAmount += msg.value;
+        emit TreasureAdded(msg.sender, msg.value);
     }
-    
-    // Only the owner can reset someone's withdrawal status
+
+    function setWithdrawalAllowance(address _user, uint256 _amount, uint256 _maximumWithdrawal) public onlyOwner {
+        require(_amount <= treasureAmount, "Not enough treasure available");
+        withdrawalAllowance[_user] = _amount;
+        maximumWithdrawal[_user] = _maximumWithdrawal;
+        emit WithdrawalApproved(_user, _amount);
+        emit MaximumWithdrawalSet(_user, _maximumWithdrawal);
+    }
+
+    function withdraw(uint256 amount) public   {
+        uint256 amountToWithdraw;
+
+       if (msg.sender == owner) {
+         require(amount <= treasureAmount, "Not enough treasury available");
+         amountToWithdraw = amount;
+         treasureAmount -= amount;
+       }else {
+            
+            uint256 allowance = withdrawalAllowance[msg.sender];
+            require(allowance > 0, "No allowance");
+            require(!hasWithdrawn[msg.sender], "Already withdrawn");
+            require(amount <= allowance, "Exceeds allowance");
+            require(amount <= treasureAmount, "Contract empty");
+            require(amount <= maximumWithdrawal[msg.sender], "Exceeds maximum withdrawal");
+
+            amountToWithdraw = amount;
+            hasWithdrawn[msg.sender] = true;
+            treasureAmount -= amount;
+            withdrawalAllowance[msg.sender] -= amount;
+       }
+
+       (bool success, ) = payable(msg.sender).call{value: amountToWithdraw}("");
+        require(success, "Transfer failed");
+
+        emit TreasureWithdrawn(msg.sender, amountToWithdraw);
+    }
+
     function resetWithdrawalStatus(address user) public onlyOwner {
         hasWithdrawn[user] = false;
     }
     
-    // Only the owner can transfer ownership
     function transferOwnership(address newOwner) public onlyOwner {
         require(newOwner != address(0), "Invalid address");
+        emit OwnershipTransferred(owner, newOwner);
         owner = newOwner;
+        
     }
     
     function getTreasureDetails() public view onlyOwner returns (uint256) {
-        return treasureAmount;
+        return address(this).balance;
     }
+
+    function checkMyStatus(address user) public view returns (uint256 allowance, bool withdrawn) {
+        return (withdrawalAllowance[user], hasWithdrawn[user]);
+    }
+    
+   
 }
