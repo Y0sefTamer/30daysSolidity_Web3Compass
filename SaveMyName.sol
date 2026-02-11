@@ -1,19 +1,28 @@
-// SPDX-License-Identifier:MIT
+/// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.19;
 
-pragma solidity ^0.8.0;
+contract SaveMyName {
+    struct Person{
+        string name;
+        string bio;
+        uint age;
+    }
+    Person[]  person;
 
-contract SaveMyName{
-     
-  string name;
-  string bio;
+    function saveName(
+        string calldata _name, 
+        string calldata _bio, 
+        uint _age) public {
 
-  function add (string memory _name, string memory _bio )public {
-    name = _name;
-    bio = _bio;
-  }
+            person.push(Person(_name, _bio, _age));
+        }
+    
 
-  function retrieve() public view returns(string memory, string memory){
-    return (name,bio);
-  }
+    function getPerson(uint _index) public view returns(string memory, string memory, uint){
+        Person memory _person = person[_index];
+        return(_person.name, _person.bio, _person.age);
+    }
+
+
 
 }
